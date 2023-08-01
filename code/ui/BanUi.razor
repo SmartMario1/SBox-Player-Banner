@@ -1,0 +1,238 @@
+@using Sandbox;
+@using Sandbox.UI;
+@using System.Collections.Generic;
+@inherits Panel
+
+@namespace Ban.UI
+
+<style>
+    .top-bar {
+        width: 100%;
+        min-height: 6vh;
+        display: flex;         
+        justify-content: space-between; /* Align elements to the start and end */
+        align-items: center; /* Center elements vertically */
+        background-color: #333;
+        overflow: hidden;
+    }
+
+    .close {
+        text-align: right;
+        font-size: 32px;
+        width: 4%;
+        height: 100%;
+        background-image: url("/code/ui/close.png"); /* Set the background image URL */
+        background-size: contain; /* Add this line to fit the image within the container */
+        background-repeat: no-repeat; /* Add this line to prevent repetition */
+        background-position: center; /* Add this line to center the image */
+        padding: 5px;
+        cursor: pointer;
+    }
+
+    .bg {
+        background-color: rgba(100, 100, 100, 0.65);
+        width: 80vw;
+        height: 80vh;
+        margin-left: 10vw;
+        margin-top: 10vh;
+        display: flex;          
+        flex-direction: column;
+    }
+    
+    .player-list {
+        overflow-y: scroll; /* Enable vertical scrolling */
+        flex-direction: column; /* Ensure list items are displayed vertically */
+    }
+
+    .hello {
+        margin: 10px;
+        font-size: 32px;
+        color: white;
+        text-shadow: 2px 2px 10px black;
+        pointer-events: all;
+        min-height: 62px;
+    }
+
+    .button {
+        background-color: rgba(50, 50, 50, 0.9); /* Green */
+        border: none;
+        color: white;
+        padding: 10px;
+        text-align: center;
+        cursor: pointer;
+        border-radius: 4px;
+        min-height: 52px;
+    }
+
+    .button:hover {
+        background-color: #4CAF50;
+        color: white;
+    }
+
+    .fakebutton {
+        background-color: rgba(50, 50, 50, 0.9); /* Green */
+        border: none;
+        color: white;
+        padding: 10px;
+        text-align: center;
+        border-radius: 4px;
+        cursor: not-allowed;
+        min-height: 52px;
+    }
+
+    .fakebutton:hover {
+        background-color: darkred;
+        color: white;
+    }
+
+    .close-image {
+        max-width: 100%;
+        max-height: 100%;
+    }
+
+    .top-link-container {
+        display: flex;
+    }
+
+    .top-link {
+        margin-right: 10px;
+        text-align: center;
+        padding: 14px 16px;
+        font-size: 32px;
+        cursor: pointer;
+        color: white;
+    }
+
+    .top-link:last-child {
+        margin-right: 0;
+    }
+
+    .active {
+        background-color: #4CAF50;
+    }
+</style>
+
+<root>
+    <div class="bg">
+        <div class="top-bar">
+            <div class="top-link-container">
+                @*This is super fugly, but idc cause I wanna be done.*@
+                @if (is_on_players)
+                {
+                    <div class="active top-link">
+                        Players
+                    </div>
+                    <div class="top-link" onmousedown=@SwitchTab>
+                        Banlist
+                    </div>
+                }
+                else
+                {
+                    <div class="top-link" onmousedown=@SwitchTab>
+                        Players
+                    </div>
+                    <div class="active top-link">
+                        Banlist
+                    </div>
+                }
+            </div>
+            <div class="close" onmousedown=@ToggleUI>
+            </div>
+        </div>
+        @if (is_on_players)
+        {
+            <div style="background-color: #333; padding: 10px;" class="hello">
+                Connected players. Click on a player to ban them.
+            </div>
+        }
+        else
+        {
+            <div style="background-color: #333; padding: 10px;" class="hello">
+                Banned players. Click on a player to unban them.
+            </div>
+        }
+        <div class="player-list">
+        @if(Game.LocalClient.IsListenServerHost)
+        {
+            @if(!is_ui_object)
+            {
+                return;
+            }
+            @if (is_on_players)
+            {
+                @foreach (var player in Game.Clients)
+                {
+                    @if (player.IsListenServerHost)
+                    {
+                        <panel class="hello fakebutton">
+                        Server owner: @(player.Name)
+                        </panel>
+                    }
+                    else
+                    {
+                        <panel class="hello button" onmousedown=@(() => BanPlayer(player))>
+                        Playername: @player.Name
+                        </panel>
+                    }
+                }
+            }
+            else
+            {
+                @foreach (var player in Banlist.Keys)
+                {
+                    <panel class="hello button" onmousedown=@(() => UnbanPlayer(player))>
+                    Playername: @Banlist[player]
+                    </panel>
+                }
+            }
+        }
+        else
+        {
+            Log.Error("You are not the server host!");
+            ToggleUI();
+        }
+        </div>
+    </div>
+</root>
+
+@code
+{
+    private int subject = -1;
+
+    private bool is_ui_object = false;
+
+    private bool is_on_players = true;
+
+    public Dictionary<long, string> Banlist = null;
+
+    public void SwitchTab()
+    {
+        is_on_players = !is_on_players;
+    }
+
+    public void SetDict (Dictionary<long, string> inp, int ident)
+    {
+        subject = ident;
+        Banlist = inp;
+        is_ui_object = (Entity.FindByIndex(subject)?.GetType() == typeof(Ban.BanEntity));
+    }
+
+    public void BanPlayer(IClient user)
+    {
+        var steamid = user.SteamId;
+        var steamname = user.Name;
+        ConsoleSystem.Run("ban_entity_ban_user", steamid, steamname);
+        Banlist?.Add(steamid, steamname);
+    }
+
+    public void UnbanPlayer(long user)
+    {
+        ConsoleSystem.Run("ban_entity_unban_user", user);
+        Banlist?.Remove(user);
+    }
+
+    private void ToggleUI()
+    {
+        ConsoleSystem.Run("ban_entity_toggle_ui " + subject);
+    }
+}
